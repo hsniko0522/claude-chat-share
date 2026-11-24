@@ -36,7 +36,7 @@ const zh = {
   mailSubject: (t: string) => `Claude 对话分享：${t}`,
   mailIntro: (t: string, n: number, files: number) =>
     `我用 Claude 分享了一段对话给你：《${t}》（${n} 条消息），附件里有 ${files} 个文件，按你的情况选一个用：`,
-  mailPkg: '你也用 Claude（桌面 app 或 Claude Code）的话，装上“对话分享”mod，在它的面板里点导入，对话会原样出现在左边侧边栏，可以直接接着聊。',
+  mailPkg: '你也用 Claude 的话（需要先装 chat-share mod）：在 Claude 桌面 app 的 Code 标签新开一个会话，把这个文件拖进输入框，打一句话发送，就能接着这段对话聊。完整的原对话也会导入，重启 Claude 后出现在左边侧边栏。',
   mailAiMd: '你用别的 AI（ChatGPT、Codex、Cursor、Gemini 等）的话，把这个文件发给它，说“读这个文件，接着这段对话继续”。',
   mailHtml: '只想看看的话，双击用浏览器打开，图片和对话都在，中间的工作过程默认折叠。',
   mailMd: '同样的内容，带图片的 Markdown 版，用 Typora、Obsidian、VS Code 等打开。',
@@ -114,6 +114,33 @@ const zh = {
   importing: '正在导入…',
   toastImported: '对话已导入',
   importFailed: (m: string) => `导入失败：${m}`,
+
+  // ---- 在 Code 会话里直接带着 .claudeshare 发送：当场载入接着聊
+  ctxIntro: (file: string) =>
+    `用户附上的 ${file} 是用 chat-share 分享的一段之前的对话。chat-share 已经把它解析成下面的记录，不需要再读取或解压这个文件。`,
+  ctxTrimmed: (n: number) => `（对话太长，为了节省上下文，前面约 ${n} 个字符已省略，只保留最近的部分。）`,
+  loadedNotice: (t: string, n: number, sidebar: boolean) =>
+    `chat-share：已把《${t}》（${n} 条消息）载入这个会话，可以直接接着聊。` +
+    (sidebar ? '完整的原对话也已导入，下次重启 Claude 后会出现在左边侧边栏。' : ''),
+  loadedTrimmed: '对话较长，只载入了最近的部分。',
+  toastLoaded: (t: string) => `已载入《${t}》`,
+  loadFailed: (m: string) => `chat-share 没能载入这个文件：${m}。消息照常发给了 Claude。`,
+
+  // ---- 双击打开
+  dblTitle: '双击 .claudeshare 文件',
+  dblOpenFolder: '打开脚本文件夹',
+  dblHow: '可选：点「一键设置」会弹出一个设置窗口（只需一次）。之后双击 .claudeshare 文件会导入对话，并问你要不要重启 Claude 打开它。',
+  dblUndoHow: '不好用时，在脚本文件夹里双击 diagnose-double-click.cmd 生成诊断报告。',
+  dblOneClick: '一键设置双击打开',
+  dblUndoBtn: '取消双击打开',
+  dblLaunched: '已打开设置窗口，按窗口里的提示完成。看到“设置好了”就可以双击 .claudeshare 了。',
+  dblUndoLaunched: '已打开取消窗口，按提示完成后 .claudeshare 会恢复原来的打开方式。',
+  dblNotFound: '没找到 mod 自带的设置脚本，可能安装不完整。',
+
+  // ---- 收到新对话
+  newShareToast: (n: number, name: string) => (n > 1 ? `下载文件夹里有 ${n} 个新收到的对话，点「📥 收到新对话」导入` : `收到新对话：${name}，点「📥 收到新对话」导入`),
+  bandNew: (n: number) => (n > 1 ? `📥 收到 ${n} 个新对话` : '📥 收到新对话'),
+  dblTip: '也可以在 Code 会话里把文件拖进输入框发送，不用重启就能接着聊。',
 }
 
 export type Strings = typeof zh
@@ -149,7 +176,7 @@ const en: Strings = {
   mailSubject: (t: string) => `Shared Claude conversation: ${t}`,
   mailIntro: (t: string, n: number, files: number) =>
     `I'm sharing a Claude conversation with you: "${t}" (${n} messages). There are ${files} files attached; pick the one that fits you:`,
-  mailPkg: 'If you use Claude too (the desktop app or Claude Code): install the "chat-share" mod and click Import in its panel. The conversation appears in your sidebar as it was, and you can keep chatting.',
+  mailPkg: 'If you use Claude too (install the chat-share mod first): start a new session in the Code tab of the Claude desktop app, drag this file into the prompt box, type something and send. You can continue the conversation right there. The full original is imported as well and appears in the sidebar after you restart Claude.',
   mailAiMd: 'If you use another AI (ChatGPT, Codex, Cursor, Gemini, etc.): give it this file and say "Read this file and continue this conversation."',
   mailHtml: 'Just want to read it: double-click to open in a browser. Images and messages are all there; the work steps are folded.',
   mailMd: 'The same content as Markdown with images, for Typora, Obsidian, VS Code and similar.',
@@ -225,6 +252,30 @@ const en: Strings = {
   importing: 'Importing…',
   toastImported: 'Conversation imported',
   importFailed: (m: string) => `Import failed: ${m}`,
+
+  ctxIntro: (file: string) =>
+    `The file ${file} the user attached is an earlier conversation shared with chat-share. chat-share has already unpacked it into the record below; there is no need to read or unpack the file.`,
+  ctxTrimmed: (n: number) => `(The conversation is long; to save context, about ${n} characters at the start were left out and only the most recent part is kept.)`,
+  loadedNotice: (t: string, n: number, sidebar: boolean) =>
+    `chat-share: loaded "${t}" (${n} messages) into this session; you can continue right here.` +
+    (sidebar ? ' The full original conversation was imported too and will appear in the sidebar after you restart Claude.' : ''),
+  loadedTrimmed: 'The conversation is long, so only the most recent part was loaded.',
+  toastLoaded: (t: string) => `Loaded "${t}"`,
+  loadFailed: (m: string) => `chat-share could not load this file: ${m}. The message was sent to Claude as usual.`,
+
+  dblTitle: 'Double-clicking .claudeshare files',
+  dblOpenFolder: 'Open script folder',
+  dblHow: 'Optional: "One-click setup" opens a setup window (once only). After that, double-clicking a .claudeshare file imports it and asks whether to restart Claude to open it.',
+  dblUndoHow: 'If it misbehaves, double-click diagnose-double-click.cmd in the script folder for a report.',
+  dblOneClick: 'One-click setup',
+  dblUndoBtn: 'Turn off double-click',
+  dblLaunched: 'The setup window is open; follow its prompts. Once it says "All set", double-clicking .claudeshare files works.',
+  dblUndoLaunched: 'The turn-off window is open; when it finishes, .claudeshare files open the way they did before.',
+  dblNotFound: 'The setup script that comes with the mod was not found; the install may be incomplete.',
+
+  newShareToast: (n: number, name: string) => (n > 1 ? `${n} new conversations in your Downloads. Click "📥 New conversation" to import` : `New conversation received: ${name}. Click "📥 New conversation" to import`),
+  bandNew: (n: number) => (n > 1 ? `📥 ${n} new conversations` : '📥 New conversation'),
+  dblTip: 'You can also drag the file into a Code session and send it, to continue right away without restarting.',
 }
 
 export const STRINGS: Record<Lang, Strings> = { zh, en }

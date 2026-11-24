@@ -210,6 +210,29 @@ export async function trashExport($: $, dir: string, lang: Lang): Promise<void> 
   }
 }
 
+// ---------------------------------------------------------------- 双击 .claudeshare 打开（只在 Windows）
+// app 里运行的命令改注册表时，改动只进 app 自己的一份私有注册表，资源管理器看不到。
+// 所以设置由 bin\setup-double-click.cmd 完成：人在面板里点按钮时，交给资源管理器去打开它，
+// 和人在资源管理器里亲手双击它一样（弹出窗口、按提示完成）。
+
+export type BinScript = 'setup-double-click.cmd' | 'undo-double-click.cmd'
+
+/** mod 自带脚本的位置；不是 Windows 时 undefined */
+export async function binScriptPath($: $, name: BinScript): Promise<string | undefined> {
+  const e = await env($)
+  if (!e.isWin) return undefined
+  return join(e.sep, $.plugin.root, 'bin', name)
+}
+
+/** 让资源管理器打开 mod 自带的脚本（等同于人在资源管理器里双击它）。只在人点按钮时调用 */
+export async function openWithExplorer($: $, name: BinScript): Promise<boolean> {
+  const p = await binScriptPath($, name)
+  if (!p || !(await $.fs.exists(p))) return false
+  // explorer 成功时也常返回 1，不看退出码
+  await $.process.run(['explorer.exe', p], { timeoutMs: 15_000 })
+  return true
+}
+
 async function isDir($: $, path: string): Promise<boolean> {
   try {
     return (await $.fs.stat(path)).kind === 'dir'
@@ -350,7 +373,8 @@ export async function buildBundle($: $, lang: Lang): Promise<Bundle> {
   const entries = ['manifest.json', 'session']
   // 附带文件夹（子任务记录、大段工具输出）不是必需的：复制不了就跳过
   if ((await isDir($, sidecar)) && (await copyDir($, sidecar, join(e.sep, stage, sid)))) entries.push(sid)
-  await run($, [e.tar, '-czf', 'package.claudeshare', ...entries], stage)
+  // Mac 上不要夹带 ._xxx 属性文件
+  await run($, [e.tar, ...(e.isMac ? ['--no-mac-metadata'] : []), '-czf', 'package.claudeshare', ...entries], stage)
   const pkg = join(e.sep, outDir, `${name}.claudeshare`)
   await copyPath($, join(e.sep, stage, 'package.claudeshare'), pkg)
   await removeDir($, stage)
@@ -503,7 +527,45 @@ function rewrite(obj: any, oldCwd: string, newCwd: string, oldSid: string, newSi
   return obj
 }
 
-export async function importBundle($: $, file: string, targetDir: string, lang: Lang): Promise<string> {
+// ---------------------------------------------------------------- 当场接着聊：把导入的对话变成给 Claude 读的记录
+const CHAT_CONTEXT_MAX = 150_000 // 字符；再长就只留最近的部分，免得占满上下文
+
+/** 消息文字里以 .claudeshare 结尾的本机路径（Code 会话里拖进来的文件以路径出现在文字里） */
+export function findSharePaths(text: string): string[] {
+  const win = text.match(/[A-Za-z]:[\\/][^\r\n"<>|*?]*?\.claudeshare/gi) ?? []
+  // Mac / Linux 路径：只认前面是空白、引号或 @ 的，免得截到 Windows 路径的后半段
+  const posix = text.match(/(?<=^|[\s"'@(\[])(?:~|\/)[^\s"<>|*?]*?\.claudeshare/gi) ?? []
+  return [...new Set([...win, ...posix].map(p => p.replace(/^@/, '')))]
+}
+
+export function historyForChat(r: ImportResult, file: string, lang: Lang): { text: string; messages: number; trimmed: boolean } {
+  const L = t(lang)
+  const items = toItems(r.recs, lang)
+  const meta: Meta = {
+    title: r.title,
+    cwd: String(r.manifest.sourceCwd ?? ''),
+    model: r.manifest.model,
+    exportedAt: String(r.manifest.exportedAt ?? new Date().toISOString()),
+    lang,
+  }
+  const md = toMarkdown(items, meta, false)
+  const messages = toTurns(items).filter(x => x.role !== 'tool').length
+  const intro = L.ctxIntro(baseName(file))
+  if (md.length <= CHAT_CONTEXT_MAX) return { text: `${intro}\n\n${md}`, messages, trimmed: false }
+  // 太长：保留开头的说明（到第一条分隔线为止）+ 最近的部分，从一轮对话的开头切
+  const headEnd = md.indexOf('\n---\n')
+  const head = headEnd > 0 ? md.slice(0, headEnd) : md.slice(0, 2000)
+  let tail = md.slice(md.length - (CHAT_CONTEXT_MAX - head.length - 500))
+  const cut = tail.indexOf('\n---\n')
+  if (cut > 0) tail = tail.slice(cut)
+  const dropped = md.length - head.length - tail.length
+  return { text: `${intro}\n\n${head}\n\n${L.ctxTrimmed(dropped)}\n${tail}`, messages, trimmed: true }
+}
+
+/** 导入的结果：给人看的一句话，以及解析出来的原始记录（当场接着聊要用） */
+export type ImportResult = { message: string; title: string; manifest: Rec; recs: Rec[]; localId?: string }
+
+export async function importBundle($: $, file: string, targetDir: string, lang: Lang): Promise<ImportResult> {
   const L = t(lang)
   const e = await env($)
   if (!(await isDir($, targetDir))) throw new Error(L.errNoFolder(targetDir))
@@ -520,7 +582,8 @@ export async function importBundle($: $, file: string, targetDir: string, lang: 
     let text = ''
     const sessDir = join(e.sep, stage, 'session')
     if (await isDir($, sessDir)) {
-      const parts = (await $.fs.list(sessDir)).filter(f => f.name.endsWith('.jsonl')).map(f => f.name).sort()
+      // Mac 打包时会夹带 ._xxx 隐藏文件（Mac 的文件属性，不是对话），跳过
+      const parts = (await $.fs.list(sessDir)).filter(f => f.name.endsWith('.jsonl') && !f.name.startsWith('._')).map(f => f.name).sort()
       for (const p of parts) text += await readText($, join(e.sep, sessDir, p))
     } else {
       text = await readText($, join(e.sep, stage, 'session.jsonl'))
@@ -529,7 +592,8 @@ export async function importBundle($: $, file: string, targetDir: string, lang: 
     const oldSid: string = manifest.sourceSessionId
     const newSid = uuid()
     const title: string = manifest.title || L.importedDefaultTitle
-    const recs = parseJsonl(text)
+    const original = parseJsonl(text)
+    const recs = original
       .map(r => rewrite(r, manifest.sourceCwd ?? '', targetDir, oldSid, newSid))
       .filter(r => r.type !== 'custom-title' && r.type !== 'agent-name')
     recs.push({ type: 'custom-title', customTitle: title, sessionId: newSid })
@@ -574,9 +638,9 @@ export async function importBundle($: $, file: string, targetDir: string, lang: 
       if (manifest.model) meta.model = manifest.model
       if (manifest.effort) meta.effort = manifest.effort
       await $.fs.write(join(e.sep, dirs[0]!, `${localId}.json`), JSON.stringify(meta, null, 2))
-      return L.importedDesktop(title)
+      return { message: L.importedDesktop(title), title, manifest, recs: original, localId }
     }
-    return L.importedCli(title, targetDir, newSid)
+    return { message: L.importedCli(title, targetDir, newSid), title, manifest, recs: original }
   } finally {
     await removeDir($, stage)
   }

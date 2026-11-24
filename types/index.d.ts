@@ -23,6 +23,10 @@ declare module 'claude-code' {
       targetDir: string
       /** 记住的邮箱（从 $.store 读出来给面板显示） */
       recent: string[]
+      /** 双击打开的一次性设置：Windows 上是 win（显示设置说明），其他系统 na */
+      doubleClick: 'win' | 'na'
+      /** 下载文件夹里还没看过的 .claudeshare：输入框上方会多出「📥 收到新对话」 */
+      newShares: InboxItem[]
     }
   }
 }

@@ -4,11 +4,15 @@ import type { Register, EngineInterface, RenderChildren } from 'claude-code'
 import type { Status, InboxItem, LastShare } from '../types'
 import {
   buildBundle, composeLinks, findGmail, sendViaGmail, openUrl, revealFile,
-  scanInbox, importBundle, currentTitle, trashExport, env,
+  scanInbox, importBundle, currentTitle, trashExport, env, findSharePaths, historyForChat,
+  binScriptPath, openWithExplorer, type BinScript,
 } from './core'
 import { t, isLang, type Lang } from './i18n'
 
 const PANE = 'chat-share'
+
+// 这个会话里已经载入过的 .claudeshare：之后的消息里再出现同一路径不重复导入
+const loadedFiles = new Set<string>()
 
 const lang = atom({ plugin: 'chat-share', key: 'lang' } as const, 'zh' as Lang)
 const title = atom({ plugin: 'chat-share', key: 'title' } as const, '')
@@ -22,6 +26,8 @@ const inbox = atom({ plugin: 'chat-share', key: 'inbox' } as const, [] as InboxI
 const importPath = atom({ plugin: 'chat-share', key: 'importPath' } as const, '')
 const targetDir = atom({ plugin: 'chat-share', key: 'targetDir' } as const, '')
 const recent = atom({ plugin: 'chat-share', key: 'recent' } as const, [] as string[])
+const doubleClick = atom({ plugin: 'chat-share', key: 'doubleClick' } as const, 'na' as 'win' | 'na')
+const newShares = atom({ plugin: 'chat-share', key: 'newShares' } as const, [] as InboxItem[])
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
 const RECENT_KEY = 'recentEmails' // $.store：跨会话保存，重启、换会话都还在
@@ -92,6 +98,53 @@ async function openPane($: $) {
   await update($, recent, () => remembered)
   const tt = await currentTitle($).catch(() => '')
   await update($, title, () => tt)
+  const sp = await binScriptPath($, 'setup-double-click.cmd').catch(() => undefined)
+  await update($, doubleClick, () => (sp ? 'win' : 'na'))
+  // 打开过面板，就算看过了下载文件夹里的这些对话
+  await markInboxSeen($, list)
+}
+
+/**
+ * 双击打开要改 Windows 的文件关联，而 app 里运行的命令改不到真正的设置（会被关在 app 自己的一份里）。
+ * 所以人点按钮时，交给资源管理器打开 mod 自带的 .cmd，和亲手双击它一样：弹出窗口，按提示完成。
+ */
+async function runBinScript($: $, name: BinScript) {
+  const L = await strings($)
+  const ok = await openWithExplorer($, name).catch(() => false)
+  if (ok) await setStatus($, 'ok', name === 'setup-double-click.cmd' ? L.dblLaunched : L.dblUndoLaunched)
+  else await setStatus($, 'error', L.dblNotFound)
+}
+
+async function openSetupFolder($: $) {
+  const sp = await binScriptPath($, 'setup-double-click.cmd').catch(() => undefined)
+  if (sp) await revealFile($, sp)
+}
+
+// ---------------------------------------------------------------- 收到新对话的提醒
+const SEEN_KEY = 'seenShares' // $.store：看过的 .claudeshare（文件名 + 修改时间）
+const shareKey = (f: InboxItem) => `${f.name}|${Math.round(f.mtimeMs)}`
+
+async function loadSeen($: $): Promise<string[]> {
+  const v = await $.store.get(SEEN_KEY).catch(() => undefined)
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+
+async function markInboxSeen($: $, list: InboxItem[]) {
+  const seen = new Set(await loadSeen($))
+  for (const f of list) seen.add(shareKey(f))
+  await $.store.set(SEEN_KEY, [...seen].slice(-200))
+  await update($, newShares, () => [])
+}
+
+/** 看下载文件夹里有没有没看过的 .claudeshare；有新的就更新提醒，toast 只在出现新文件时弹 */
+async function checkNewShares($: $, toast: boolean) {
+  const list = await scanInbox($)
+  const seen = new Set(await loadSeen($))
+  const fresh = list.filter(f => !seen.has(shareKey(f)))
+  const before = new Set((await read($, newShares)).map(shareKey))
+  await update($, newShares, () => fresh)
+  const added = fresh.filter(f => !before.has(shareKey(f)))
+  if (toast && added.length) $.ui.toast((await strings($)).newShareToast(fresh.length, added[0]!.name))
 }
 
 async function addDraft($: $, raw?: string) {
@@ -190,8 +243,8 @@ async function doImport($: $, file: string) {
   try {
     await setStatus($, 'busy', L.importing)
     const dir = (await read($, targetDir)).trim().replace(/^"|"$/g, '')
-    const msg = await importBundle($, file, dir, l)
-    await setStatus($, 'ok', msg)
+    const { message } = await importBundle($, file, dir, l)
+    await setStatus($, 'ok', message)
     $.ui.toast(L.toastImported)
   } catch (err) {
     await setStatus($, 'error', L.importFailed((err as Error).message))
@@ -210,7 +263,11 @@ export const register: Register = on => {
     const l = await loadLang($)
     await update($, lang, () => l)
     await registerCommand($, l)
-    return next(e)
+    const started = await next(e)
+    // 打开时看一次下载文件夹，之后每分钟看一次：收到新的 .claudeshare 就提醒
+    void checkNewShares($, true).catch(() => undefined)
+    $.clock.every(60_000, () => void checkNewShares($, true).catch(() => undefined))
+    return started
   })
 
   on('command.run', { command: 'share-chat' }, async $ => {
@@ -218,14 +275,48 @@ export const register: Register = on => {
     return { text: (await strings($)).commandOpened }
   })
 
+  // 在 Code 会话里带着 .claudeshare 发送（拖进来的文件以路径出现在消息文字里）：
+  //   A. 后台把完整对话导入硬盘，下次重启 Claude 后出现在侧边栏
+  //   B. 把对话记录附在这条消息后面交给 Claude，当场接着聊，不用重启
+  on('prompt.submit', async ($, e, next) => {
+    if (e.origin?.kind !== 'composer') return next(e) // 只处理人在输入框里发的消息
+    const paths = findSharePaths([e.text, ...(e.context ?? [])].join('\n'))
+    if (!paths.length) return next(e)
+    let file: string | undefined
+    for (const p of paths) {
+      if (!loadedFiles.has(p.toLowerCase()) && (await $.fs.exists(p))) {
+        file = p
+        break
+      }
+    }
+    if (!file) return next(e)
+    const l = await loadLang($)
+    const L = t(l)
+    try {
+      const { home } = await env($)
+      const r = await importBundle($, file, home, l)
+      const h = historyForChat(r, file, l)
+      loadedFiles.add(file.toLowerCase())
+      const notice = L.loadedNotice(r.title, h.messages, !!r.localId) + (h.trimmed ? ' ' + L.loadedTrimmed : '')
+      await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: notice }] } }).catch(() => undefined)
+      $.ui.toast(L.toastLoaded(r.title))
+      return next({ ...e, context: [...(e.context ?? []), h.text] })
+    } catch (err) {
+      $.ui.toast(L.loadFailed((err as Error).message))
+      return next(e)
+    }
+  }).catch(($, e, next) => next(e)) // 出错时照常发送，绝不挡住正常消息
+
   // 输入框上方的“分享对话”按钮
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const { Box, Button } = $.ui.resolve(e)
     const L = await strings($)
+    const fresh = await read($, newShares)
     return (
-      <Box>
+      <Box flexDirection="row" gap={1}>
         <Button key="open-share" label={L.bandButton} onPress={() => openPane($)} />
+        {fresh.length > 0 && <Button key="open-new" variant="primary" label={L.bandNew(fresh.length)} onPress={() => openPane($)} />}
       </Box>
     )
   })
@@ -236,6 +327,7 @@ export const register: Register = on => {
       read($, lang), read($, title), read($, emails), read($, draft), read($, lastShare), read($, sentDir),
       read($, isConfirmingDelete), read($, status), read($, inbox), read($, importPath), read($, targetDir), read($, recent),
     ])
+    const dbl = await read($, doubleClick)
     const L = t(l)
     const busy = st.kind === 'busy'
     const suggestions = rec.filter(m => !list.includes(m))
@@ -397,6 +489,19 @@ export const register: Register = on => {
               }}
             />
           </Box>,
+          // 双击打开（只在 Windows 上有）：点一下，交给资源管理器运行设置脚本
+          dbl === 'win' && (
+            <Box key="dbl" flexDirection="column" gap={1} borderStyle="round" borderColor="subtle" paddingX={1} paddingY={1}>
+              <Text size="footnote" weight="semibold">{L.dblTitle}</Text>
+              <Text size="caption">{L.dblHow}</Text>
+              <Box flexDirection="row" flexWrap="wrap" gap={1}>
+                <Button key="dbl-setup" variant="primary" label={L.dblOneClick} onPress={() => runBinScript($, 'setup-double-click.cmd')} />
+                <Button key="dbl-undo" label={L.dblUndoBtn} onPress={() => runBinScript($, 'undo-double-click.cmd')} />
+                <Button key="dbl-folder" plain label={L.dblOpenFolder} onPress={() => openSetupFolder($)} />
+              </Box>
+              <Text size="caption" dimColor>{L.dblTip}</Text>
+            </Box>
+          ),
         )}
       </Box>
     )

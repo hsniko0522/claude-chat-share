@@ -109,12 +109,37 @@ After installing, start a new session or type `/reload-plugins`; the "⤴ Share 
 
 ### 接收 · Receive
 
-1. 把邮件里的 `.claudeshare` 附件下载到 **下载** 文件夹。
-   Download the `.claudeshare` attachment to your **Downloads** folder.
-2. 打开分享面板，在「导入别人发来的对话」里点「导入」。也可以填文件路径，以及要放进哪个项目文件夹。
-   Open the share panel and click Import under "Import a conversation sent to you". You can also enter a file path and the project folder it should go into.
-3. **完全退出 Claude 再打开**（托盘图标 → 退出），左边侧边栏就会出现这段对话，点进去接着聊。
-   **Fully quit Claude and reopen it** (tray icon → Quit). The conversation appears in the sidebar; open it and keep chatting.
+**最简单的做法（推荐，三步，不用任何设置，Mac 也能用）：**
+**The easiest way (recommended; three steps, no setup, works on Mac too):**
+
+1. 下载邮件里的 `.claudeshare` 附件。 Download the `.claudeshare` attachment from the email.
+2. 打开 Claude 桌面 app 的 **Code 标签**，新开一个会话，把文件**拖进输入框**。 Open the **Code tab** of the Claude desktop app, start a new session, and **drag the file into the prompt box**.
+3. 打一句话（比如“我们之前聊到哪了？”）**发送**。 Type something (for example "Where did we leave off?") and **send**.
+
+Claude 会读完整段对话，你马上就能接着聊。完整的原对话也会在后台导入，下次重启 Claude 后出现在左边侧边栏。
+
+Claude reads the whole conversation and you can continue right away. The full original is also imported in the background and appears in the sidebar the next time Claude restarts.
+
+> 注意要用 **Code 标签**。普通 Chat 里 mod 不起作用，Claude 读不了这种文件。
+> Use the **Code tab**. The mod does not run in the regular Chat, where Claude cannot read this file.
+
+> 下载了新的 `.claudeshare` 后，输入框上方会出现 **「📥 收到新对话」**，点它可以打开分享面板。
+> When a new `.claudeshare` lands in your Downloads folder, a **"📥 New conversation"** button appears above the prompt box; click it to open the share panel.
+
+**可选：双击打开（Windows） · Optional: double-click (Windows)**
+
+在分享面板「导入」卡片里点一次 **「一键设置双击打开」**，弹出的窗口提示“设置好了”就完成了。之后双击 `.claudeshare` 文件：导入对话 → 问你要不要重启 Claude → 选“是”就重启并直接打开这段对话。点「取消双击打开」可以恢复原来的打开方式。
+
+In the Import card of the share panel, click **"One-click setup"** once; when the window says "All set", you are done. After that, double-clicking a `.claudeshare` file imports the conversation and asks whether to restart Claude; choose Yes to restart and open it. "Turn off double-click" restores how the file opened before.
+
+> 按钮背后做的事：交给资源管理器运行 mod 自带的 `bin\setup-double-click.cmd`，和你在资源管理器里亲手双击它一样（Claude app 里运行的程序改不到 Windows 真正的文件关联，所以要经过资源管理器）。`.cmd` 只让 PowerShell 对这一次运行放行，不改系统设置。不好用时，在「打开脚本文件夹」里双击 `diagnose-double-click.cmd` 生成诊断报告。更新 mod 后如果双击失效，再点一次「一键设置」。
+> What the button does: it has File Explorer run the mod's own `bin\setup-double-click.cmd`, the same as double-clicking it yourself (programs run inside the Claude app cannot change Windows' real file associations, so it goes through File Explorer). The `.cmd` only lets PowerShell run that one script and changes no system setting. If it misbehaves, double-click `diagnose-double-click.cmd` in "Open script folder" for a report. If double-clicking stops working after a mod update, click "One-click setup" again.
+
+**也可以：在面板里导入 · Also possible: import from the panel**
+
+打开分享面板，在「导入别人发来的对话」里点「导入」（或填文件路径和项目文件夹），然后**完全退出 Claude 再打开**（托盘图标 → 退出），对话就会出现在侧边栏。
+
+Open the share panel and click Import under "Import a conversation sent to you" (or enter a file path and project folder), then **fully quit and reopen Claude** (tray icon → Quit); the conversation appears in the sidebar.
 
 ---
 
@@ -126,8 +151,10 @@ After installing, start a new session or type `/reload-plugins`; the "⤴ Share 
   **Labels only**: in English mode the interface, email and file labels are in English; the conversation itself is not translated.
 - **用到了 Claude 的内部格式**：导入依赖 Claude Code 存会话的方式，这不是公开接口，Claude 更新后可能需要修。
   **Relies on internal formats**: importing depends on how Claude Code stores sessions. That is not a public interface and may need fixing after Claude updates.
-- **测试环境**：目前只在 Windows 上实际测试过。macOS / Linux 的代码写了，但没测过。
-  **Tested on**: Windows only so far. The macOS / Linux code paths are written but untested.
+- **测试环境**：主要在 Windows 上测试。macOS 上导出发送已经有人用过；在 Mac 上导入、删除存档还没测过。双击打开目前只支持 Windows。
+  **Tested on**: mainly Windows. Exporting and sending on macOS has been used; importing and deleting local copies on a Mac are untested. Double-click opening is Windows only for now.
+- **接着聊时的长度**：方式一把对话交给 Claude 时，太长的对话（约 15 万字符以上）只交最近的部分，前面会注明省略了多少。完整的原对话仍会导入到侧边栏。
+  **Length when continuing**: in Way 1, very long conversations (over about 150,000 characters) are handed over with only the most recent part, noting how much was left out. The full original is still imported to the sidebar.
 - **附件大小**：Gmail 单封邮件上限 25 MB。放不下时按“导入包 → ai.md → html → md → txt”的顺序优先附上，其余在正文里注明。
   **Attachment size**: Gmail allows 25 MB per email. If everything does not fit, files are attached in the order package → ai.md → html → md → txt, and the rest are named in the email body.
 
