@@ -36,7 +36,7 @@ const zh = {
   mailSubject: (t: string) => `Claude 对话分享：${t}`,
   mailIntro: (t: string, n: number, files: number) =>
     `我用 Claude 分享了一段对话给你：《${t}》（${n} 条消息），附件里有 ${files} 个文件，按你的情况选一个用：`,
-  mailPkg: '你也用 Claude 的话（需要先装 chat-share mod）：在 Claude 桌面 app 的 Code 标签新开一个会话，把这个文件拖进输入框，打一句话发送，就能接着这段对话聊。完整的原对话也会导入，重启 Claude 后出现在左边侧边栏。',
+  mailPkg: '你也用 Claude 的话（需要先装 chat-share mod）：把这个文件下载下来，在 Claude 桌面 app 里点输入框上方的「📥 收到新对话」，再点「导入并打开」。Claude 重启后会直接打开这段对话，标题和历史都在，可以接着聊。',
   mailAiMd: '你用别的 AI（ChatGPT、Codex、Cursor、Gemini 等）的话，把这个文件发给它，说“读这个文件，接着这段对话继续”。',
   mailHtml: '只想看看的话，双击用浏览器打开，图片和对话都在，中间的工作过程默认折叠。',
   mailMd: '同样的内容，带图片的 Markdown 版，用 Typora、Obsidian、VS Code 等打开。',
@@ -140,6 +140,19 @@ const zh = {
   // ---- 收到新对话
   newShareToast: (n: number, name: string) => (n > 1 ? `下载文件夹里有 ${n} 个新收到的对话，点「📥 收到新对话」导入` : `收到新对话：${name}，点「📥 收到新对话」导入`),
   bandNew: (n: number) => (n > 1 ? `📥 收到 ${n} 个新对话` : '📥 收到新对话'),
+
+  // ---- 导入并打开（要重启 Claude）
+  importOpenBtn: '导入并打开',
+  importOpenTitle: (name: string) => `导入并打开 ${name}？`,
+  importOpenWarn: 'Claude 要重启一次，才能在侧边栏里显示这段对话（标题和历史都完整）。重启会中断 Claude 里正在进行的任务。',
+  importRestartBtn: '导入并重启打开',
+  importOnlyBtn: '只导入，稍后自己重启',
+  readyToOpen: (title: string) => `《${title}》的完整对话已经导入，重启 Claude 就能在侧边栏打开它。`,
+  restartOpenBtn: '重启并打开',
+  laterBtn: '以后再说',
+  restarting: (title: string) => `正在重启 Claude，重开后会直接打开《${title}》……`,
+  restartUnsupported: (msg: string) => `${msg ? msg + ' ' : ''}这台电脑上没法自动重启 Claude，请完全退出 Claude 再打开，它会出现在侧边栏。`,
+  bandOpenFull: '↻ 打开完整对话',
   dblTip: '也可以在 Code 会话里把文件拖进输入框发送，不用重启就能接着聊。',
 }
 
@@ -176,7 +189,7 @@ const en: Strings = {
   mailSubject: (t: string) => `Shared Claude conversation: ${t}`,
   mailIntro: (t: string, n: number, files: number) =>
     `I'm sharing a Claude conversation with you: "${t}" (${n} messages). There are ${files} files attached; pick the one that fits you:`,
-  mailPkg: 'If you use Claude too (install the chat-share mod first): start a new session in the Code tab of the Claude desktop app, drag this file into the prompt box, type something and send. You can continue the conversation right there. The full original is imported as well and appears in the sidebar after you restart Claude.',
+  mailPkg: 'If you use Claude too (install the chat-share mod first): download this file, then in the Claude desktop app click "📥 New conversation" above the prompt box and "Import and open". After Claude restarts it opens this conversation, with its title and full history, ready to continue.',
   mailAiMd: 'If you use another AI (ChatGPT, Codex, Cursor, Gemini, etc.): give it this file and say "Read this file and continue this conversation."',
   mailHtml: 'Just want to read it: double-click to open in a browser. Images and messages are all there; the work steps are folded.',
   mailMd: 'The same content as Markdown with images, for Typora, Obsidian, VS Code and similar.',
@@ -275,6 +288,18 @@ const en: Strings = {
 
   newShareToast: (n: number, name: string) => (n > 1 ? `${n} new conversations in your Downloads. Click "📥 New conversation" to import` : `New conversation received: ${name}. Click "📥 New conversation" to import`),
   bandNew: (n: number) => (n > 1 ? `📥 ${n} new conversations` : '📥 New conversation'),
+
+  importOpenBtn: 'Import and open',
+  importOpenTitle: (name: string) => `Import and open ${name}?`,
+  importOpenWarn: 'Claude needs one restart to show this conversation in the sidebar (with its title and full history). Restarting stops anything Claude is running right now.',
+  importRestartBtn: 'Import and restart',
+  importOnlyBtn: "Import only, I'll restart later",
+  readyToOpen: (title: string) => `The full conversation "${title}" is imported. Restart Claude to open it from the sidebar.`,
+  restartOpenBtn: 'Restart and open',
+  laterBtn: 'Later',
+  restarting: (title: string) => `Restarting Claude; it will open "${title}" when it comes back…`,
+  restartUnsupported: (msg: string) => `${msg ? msg + ' ' : ''}Claude cannot be restarted automatically on this computer. Fully quit and reopen Claude; it will be in the sidebar.`,
+  bandOpenFull: '↻ Open full conversation',
   dblTip: 'You can also drag the file into a Code session and send it, to continue right away without restarting.',
 }
 

@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { Register, EngineInterface, RenderChildren } from 'claude-code'
 
-import type { Status, InboxItem, LastShare } from '../types'
+import type { Status, InboxItem, LastShare, Pending } from '../types'
 import {
   buildBundle, composeLinks, findGmail, sendViaGmail, openUrl, revealFile,
   scanInbox, importBundle, currentTitle, trashExport, env, findSharePaths, historyForChat,
-  binScriptPath, openWithExplorer, type BinScript,
+  binScriptPath, openWithExplorer, type BinScript, restartAndOpen,
 } from './core'
 import { t, isLang, type Lang } from './i18n'
 
@@ -28,6 +28,7 @@ const targetDir = atom({ plugin: 'chat-share', key: 'targetDir' } as const, '')
 const recent = atom({ plugin: 'chat-share', key: 'recent' } as const, [] as string[])
 const doubleClick = atom({ plugin: 'chat-share', key: 'doubleClick' } as const, 'na' as 'win' | 'na')
 const newShares = atom({ plugin: 'chat-share', key: 'newShares' } as const, [] as InboxItem[])
+const pending = atom({ plugin: 'chat-share', key: 'pending' } as const, null as Pending | null)
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
 const RECENT_KEY = 'recentEmails' // $.store：跨会话保存，重启、换会话都还在
@@ -234,21 +235,48 @@ async function doDelete($: $) {
   }
 }
 
-async function doImport($: $, file: string) {
-  if (await isBusy($)) return
-  const l = await read($, lang)
-  const L = t(l)
+// 「导入并打开」：先问一句（要重启 Claude），确认后导入、重启、直接跳到这段对话
+async function askImportOpen($: $, file: string) {
   file = file.trim().replace(/^"|"$/g, '')
   if (!file) return
+  const name = file.split(/[\\/]/).pop() ?? file
+  await update($, pending, () => ({ kind: 'file' as const, path: file, name }))
+}
+
+/** restart：导入后马上重启并打开；否则只导入，侧边栏等下次重启再出现 */
+async function doImport($: $, restart: boolean) {
+  if (await isBusy($)) return
+  const p = await read($, pending)
+  if (!p || p.kind !== 'file') return
+  const l = await read($, lang)
+  const L = t(l)
+  await update($, pending, () => null)
   try {
     await setStatus($, 'busy', L.importing)
     const dir = (await read($, targetDir)).trim().replace(/^"|"$/g, '')
-    const { message } = await importBundle($, file, dir, l)
-    await setStatus($, 'ok', message)
+    const r = await importBundle($, p.path, dir, l)
+    if (restart && r.localId) {
+      await setStatus($, 'busy', L.restarting(r.title))
+      if (await restartAndOpen($, r.localId)) return
+      await setStatus($, 'warn', L.restartUnsupported(r.message))
+      return
+    }
+    await setStatus($, 'ok', r.message)
+    if (r.localId) await update($, pending, () => ({ kind: 'imported' as const, title: r.title, localId: r.localId! }))
     $.ui.toast(L.toastImported)
   } catch (err) {
     await setStatus($, 'error', L.importFailed((err as Error).message))
   }
+}
+
+/** 已经导入过的（比如拖进 Code 会话时后台导入的）：重启并打开 */
+async function openImported($: $) {
+  const p = await read($, pending)
+  if (!p || p.kind !== 'imported') return
+  const L = await strings($)
+  await update($, pending, () => null)
+  await setStatus($, 'busy', L.restarting(p.title))
+  if (!(await restartAndOpen($, p.localId))) await setStatus($, 'warn', L.restartUnsupported(''))
 }
 
 function fmtSize(n: number) {
@@ -297,6 +325,8 @@ export const register: Register = on => {
       const r = await importBundle($, file, home, l)
       const h = historyForChat(r, file, l)
       loadedFiles.add(file.toLowerCase())
+      // 完整对话已在后台导入：输入框上方给一个「打开完整对话」，点了可以重启并跳过去看历史
+      if (r.localId) await update($, pending, () => ({ kind: 'imported' as const, title: r.title, localId: r.localId! }))
       const notice = L.loadedNotice(r.title, h.messages, !!r.localId) + (h.trimmed ? ' ' + L.loadedTrimmed : '')
       await $.session.append({ message: { type: 'system', content: [{ type: 'text', text: notice }] } }).catch(() => undefined)
       $.ui.toast(L.toastLoaded(r.title))
@@ -313,10 +343,12 @@ export const register: Register = on => {
     const { Box, Button } = $.ui.resolve(e)
     const L = await strings($)
     const fresh = await read($, newShares)
+    const p = await read($, pending)
     return (
       <Box flexDirection="row" gap={1}>
         <Button key="open-share" label={L.bandButton} onPress={() => openPane($)} />
         {fresh.length > 0 && <Button key="open-new" variant="primary" label={L.bandNew(fresh.length)} onPress={() => openPane($)} />}
+        {p?.kind === 'imported' && <Button key="open-full" variant="primary" label={L.bandOpenFull} onPress={() => openPane($)} />}
       </Box>
     )
   })
@@ -328,6 +360,7 @@ export const register: Register = on => {
       read($, isConfirmingDelete), read($, status), read($, inbox), read($, importPath), read($, targetDir), read($, recent),
     ])
     const dbl = await read($, doubleClick)
+    const pend = await read($, pending)
     const L = t(l)
     const busy = st.kind === 'busy'
     const suggestions = rec.filter(m => !list.includes(m))
@@ -361,6 +394,29 @@ export const register: Register = on => {
             <Button key="lang-en" label="English" variant={l === 'en' ? 'primary' : 'secondary'} onPress={() => switchLang($, 'en')} />
           </Box>
         </Box>
+
+        {/* 导入并打开：确认（要重启 Claude） */}
+        {pend?.kind === 'file' && (
+          <Box flexDirection="column" gap={1} borderStyle="round" borderColor="claude" paddingX={2} paddingY={1}>
+            <Text size="footnote" weight="semibold">{L.importOpenTitle(pend.name)}</Text>
+            <Text size="caption">{L.importOpenWarn}</Text>
+            <Box flexDirection="row" flexWrap="wrap" gap={1}>
+              <Button key="imp-restart" variant="primary" label={L.importRestartBtn} onPress={() => doImport($, true)} />
+              <Button key="imp-only" label={L.importOnlyBtn} onPress={() => doImport($, false)} />
+              <Button key="imp-cancel" plain label={L.cancel} onPress={() => update($, pending, () => null)} />
+            </Box>
+          </Box>
+        )}
+        {pend?.kind === 'imported' && (
+          <Box flexDirection="column" gap={1} borderStyle="round" borderColor="claude" paddingX={2} paddingY={1}>
+            <Text size="footnote" weight="semibold">{L.readyToOpen(pend.title)}</Text>
+            <Text size="caption">{L.importOpenWarn}</Text>
+            <Box flexDirection="row" flexWrap="wrap" gap={1}>
+              <Button key="open-restart" variant="primary" label={L.restartOpenBtn} onPress={() => openImported($)} />
+              <Button key="open-later" plain label={L.laterBtn} onPress={() => update($, pending, () => null)} />
+            </Box>
+          </Box>
+        )}
 
         {/* 收件人 */}
         {card('recipients', L.recipients,
@@ -457,7 +513,7 @@ export const register: Register = on => {
                       <Text size="footnote" wrap="truncate-middle">{f.name}</Text>
                       <Text size="caption" dimColor>{fmtSize(f.size)}</Text>
                     </Box>
-                    <Button key={'imp-btn:' + f.path} label={L.importBtn} onPress={() => doImport($, f.path)} />
+                    <Button key={'imp-btn:' + f.path} variant="primary" label={L.importOpenBtn} onPress={() => askImportOpen($, f.path)} />
                   </Box>
                 ))}
               </Box>,
@@ -466,9 +522,9 @@ export const register: Register = on => {
             label={L.importPath}
             placeholder={L.importPathPh}
             value={ip}
-            submitLabel={L.importBtn}
+            submitLabel={L.importOpenBtn}
             onInput={v => void update($, importPath, () => v)}
-            onSubmit={v => void doImport($, v)}
+            onSubmit={v => void askImportOpen($, v)}
           />,
           <Input
             key="target-dir"

@@ -143,7 +143,8 @@ try {
 
   # 5. 重启 Claude 并打开这段对话（只关桌面 app 本身，不碰别的程序）
   $link = "claude://claude.ai/epitaxy/$localId"
-  $desktop = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*\WindowsApps\Claude_*\app\Claude.exe' })
+  # Store 版和官网安装版都认；不碰 Claude Code 的后台引擎（路径里有 \claude-code\）
+  $desktop = @(Get-Process -Name Claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -notmatch '\\claude-code\\' })
   if ($desktop.Count -eq 0) {
     [void](Show-Box ($T.notRunning -f $title))
     if (-not $NoPrompt) { Start-Process $link }

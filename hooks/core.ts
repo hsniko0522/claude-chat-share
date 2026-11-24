@@ -233,6 +233,44 @@ export async function openWithExplorer($: $, name: BinScript): Promise<boolean> 
   return true
 }
 
+// ---------------------------------------------------------------- 重启 Claude 并打开一个会话
+// 新导入的会话，app 要重启才认得（它只在启动时读一次会话列表）；重启后用 claude:// 链接直接跳过去。
+// 关掉 Claude 会连带关掉这个 mod 所在的引擎，所以重启要交给 app 外面的进程做：
+//   Windows：写一个一次性的 .cmd，交给资源管理器运行（和人双击它一样）
+//   macOS：后台起一个独立的 shell，先退出 Claude，再用链接打开
+// 只在人确认之后调用。
+
+/** 关掉 Claude 桌面 app（Store 版和官网安装版都认；不碰 Claude Code 的后台引擎），再用链接打开 */
+const WIN_RESTART_PS =
+  "Get-Process -Name Claude -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -notmatch '\\\\claude-code\\\\' } | Stop-Process -Force;" +
+  ' Start-Sleep -Seconds 3; Start-Process '
+
+export async function restartAndOpen($: $, localId: string): Promise<boolean> {
+  if (!/^local_[0-9a-f-]{36}$/.test(localId)) return false // 只接受我们自己生成的会话编号
+  const e = await env($)
+  const link = `claude://claude.ai/epitaxy/${localId}`
+  if (e.isWin) {
+    const cmd = join(e.sep, e.data, 'restart-open.cmd')
+    await $.fs.write(
+      cmd,
+      [
+        '@echo off',
+        'rem chat-share: restart Claude and open the imported conversation (written by the mod, safe to delete)',
+        `powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "${WIN_RESTART_PS}'${link}'"`,
+        '',
+      ].join('\r\n'),
+    )
+    await $.process.run(['explorer.exe', cmd], { timeoutMs: 15_000 })
+    return true
+  }
+  if (e.isMac) {
+    const script = `(sleep 1; osascript -e 'quit app "Claude"'; sleep 4; open '${link}') >/dev/null 2>&1 &`
+    await $.process.run(['sh', '-c', script], { timeoutMs: 15_000 })
+    return true
+  }
+  return false
+}
+
 async function isDir($: $, path: string): Promise<boolean> {
   try {
     return (await $.fs.stat(path)).kind === 'dir'
