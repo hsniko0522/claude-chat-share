@@ -39,30 +39,8 @@ Send the current Claude conversation to someone by email. If they use Claude too
 
 ## 安装 · Install
 
-这是**私有仓库**，安装前要先做两件事。
-This is a **private repository**, so two things come first.
-
-### 1. 接受邀请 · Accept the invitation
-
-请仓库作者在 GitHub 上把你加为协作者（Settings → Collaborators），然后在邮件或 GitHub 通知里接受邀请。
-
-Ask the repository owner to add you as a collaborator on GitHub (Settings → Collaborators), then accept the invitation from the email or your GitHub notifications.
-
-### 2. 让电脑能访问 GitHub · Let your computer sign in to GitHub
-
-安装时不会弹出登录框，所以要先在电脑上登录一次 GitHub。装好 [GitHub CLI](https://cli.github.com/) 后，在终端运行：
-
-The install never asks you to sign in, so sign in to GitHub on your computer first. Install the [GitHub CLI](https://cli.github.com/), then run in a terminal:
-
-```powershell
-gh auth login
-```
-
-```powershell
-gh auth setup-git
-```
-
-### 3. 安装插件 · Install the plugin
+需要 Claude 桌面 app（用 Code 标签）或 Claude Code。不需要 GitHub 账号。
+You need the Claude desktop app (its Code tab) or Claude Code. No GitHub account required.
 
 **在 Claude 桌面 app 里 · In the Claude desktop app**
 
@@ -174,3 +152,9 @@ claude plugin uninstall chat-share@claude-chat-share
 ```
 
 更新后输入 `/reload-plugins` 或新开会话。 After updating, type `/reload-plugins` or start a new session.
+
+---
+
+## 许可证 · License
+
+MIT，见 [LICENSE](LICENSE)。 MIT; see [LICENSE](LICENSE).
