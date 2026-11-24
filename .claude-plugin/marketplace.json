@@ -1,0 +1,6 @@
+{
+  "name": "claude-chat-share",
+  "owner": { "name": "hsniko0522" },
+  "description": "Share a Claude Code conversation by email; the recipient can import it into Claude and keep chatting. 分享 Claude Code 对话，对方导入后可接着聊。",
+  "plugins": [{ "name": "chat-share", "source": "./" }]
+}

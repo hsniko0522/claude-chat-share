@@ -1,0 +1,7 @@
+{
+  "name": "chat-share",
+  "version": "0.2.0",
+  "description": "Share this Claude conversation by email (Chinese / English). The recipient can import it into Claude and keep chatting, or open it in another AI, a browser or as text. 把当前对话发给别人，对方能导入 Claude 接着聊，也能用别的 AI、浏览器或文本打开。",
+  "author": { "name": "hsniko0522" },
+  "types": "./types/index.d.ts"
+}

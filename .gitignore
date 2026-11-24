@@ -1,0 +1,7 @@
+# 引擎自动生成的类型文件 / Type files the engine generates
+.claude-plugin/types/
+
+# 系统和编辑器生成的文件 / OS and editor files
+.DS_Store
+Thumbs.db
+*.log
