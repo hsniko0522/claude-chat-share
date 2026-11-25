@@ -42,6 +42,31 @@ Send the current Claude conversation to someone by email. If they use Claude too
 需要 Claude 桌面 app（用 Code 标签）或 Claude Code。不需要 GitHub 账号。
 You need the Claude desktop app (its Code tab) or Claude Code. No GitHub account required.
 
+**最简单：让 Claude 帮你装 · Easiest: ask Claude to install it**
+
+只装了桌面 app 的话，终端里通常没有 `claude` 命令，这时可以让 Claude 自己装。在 Claude 桌面 app 的 **Code 标签**新开一个会话，把下面这段发出去：
+
+If you only have the desktop app, your terminal usually has no `claude` command, so let Claude do it. Start a new session in the **Code tab** of the Claude desktop app and send this:
+
+```
+帮我安装 chat-share 插件。用桌面 app 自带的 claude 命令行程序依次运行，前两步如果报“不存在”就跳过：
+1. claude plugin uninstall chat-share@claude-chat-share
+2. claude plugin marketplace remove claude-chat-share
+3. claude plugin marketplace add hsniko0522/claude-chat-share
+4. claude plugin install chat-share@claude-chat-share --scope user
+5. claude plugin list，把 chat-share 那几行给我看
+
+Please install the chat-share plugin. Using the claude CLI that ships with the desktop app, run these in order (skip steps 1-2 if they say it doesn't exist):
+1. claude plugin uninstall chat-share@claude-chat-share
+2. claude plugin marketplace remove claude-chat-share
+3. claude plugin marketplace add hsniko0522/claude-chat-share
+4. claude plugin install chat-share@claude-chat-share --scope user
+5. claude plugin list, and show me the chat-share lines
+```
+
+装完后新开一个 Code 会话（或输入 `/reload-plugins`），输入框上方会出现「⤴ 分享对话」。更新到新版本也可以用同一段话。
+Then start a new Code session (or type `/reload-plugins`); "⤴ Share chat" appears above the prompt box. The same message also works for updating to a new version.
+
 **在 Claude 桌面 app 里 · In the Claude desktop app**
 
 点输入框旁边的 **+** → **Plugins** → **Add marketplace**，填 `hsniko0522/claude-chat-share` → 然后 **Add plugin**，选 `chat-share`。
@@ -132,8 +157,8 @@ Click **"One-click setup"** once in the Import card of the share panel; when the
   **Labels only**: in English mode the interface, email and file labels are in English; the conversation itself is not translated.
 - **用到了 Claude 的内部格式**：导入依赖 Claude Code 存会话的方式，这不是公开接口，Claude 更新后可能需要修。
   **Relies on internal formats**: importing depends on how Claude Code stores sessions. That is not a public interface and may need fixing after Claude updates.
-- **测试环境**：主要在 Windows 上测试。macOS 上导出发送已经有人用过；在 Mac 上导入、删除存档还没测过。双击打开目前只支持 Windows。
-  **Tested on**: mainly Windows. Exporting and sending on macOS has been used; importing and deleting local copies on a Mac are untested. Double-click opening is Windows only for now.
+- **测试环境**：主要在 Windows 上测试。macOS 上导出、发送、导入都有人用过；Mac 上「导入并打开」的自动重启在 0.4.1 里重写过，还在验证中，不行的话手动完全退出再打开 Claude 即可（过程记在插件数据文件夹的 `restart.log`）。双击打开目前只支持 Windows。
+  **Tested on**: mainly Windows. Exporting, sending and importing on macOS have been used; the automatic restart for "Import and open" on a Mac was rewritten in 0.4.1 and is still being verified. If it doesn't restart, fully quit and reopen Claude yourself (each step is logged to `restart.log` in the plugin's data folder). Double-click opening is Windows only for now.
 - **接着聊时的长度**：方式一把对话交给 Claude 时，太长的对话（约 15 万字符以上）只交最近的部分，前面会注明省略了多少。完整的原对话仍会导入到侧边栏。
   **Length when continuing**: in Way 1, very long conversations (over about 150,000 characters) are handed over with only the most recent part, noting how much was left out. The full original is still imported to the sidebar.
 - **附件大小**：Gmail 单封邮件上限 25 MB。放不下时按“导入包 → ai.md → html → md → txt”的顺序优先附上，其余在正文里注明。

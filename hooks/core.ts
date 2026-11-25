@@ -264,8 +264,31 @@ export async function restartAndOpen($: $, localId: string): Promise<boolean> {
     return true
   }
   if (e.isMac) {
-    const script = `(sleep 1; osascript -e 'quit app "Claude"'; sleep 4; open '${link}') >/dev/null 2>&1 &`
-    await $.process.run(['sh', '-c', script], { timeoutMs: 15_000 })
+    // 重启脚本必须和 Claude 彻底脱开：它是 Claude 的子进程，Claude 一退出（或这次调用一结束）
+    // 普通的后台进程会被一起结束。所以用系统自带的 perl：fork 后父进程马上返回，子进程 setsid
+    // 开一个新会话，再执行脚本。每一步写进 restart.log，出问题时看得到卡在哪。
+    const sh = join(e.sep, e.data, 'restart-open.sh')
+    const log = join(e.sep, e.data, 'restart.log')
+    await $.fs.write(
+      sh,
+      [
+        '#!/bin/sh',
+        '# chat-share: restart Claude and open the imported conversation (written by the mod, safe to delete)',
+        'LOG="$1"; LINK="$2"',
+        '{',
+        '  echo "--- $(date) start"',
+        '  sleep 1',
+        `  osascript -e 'tell application "Claude" to quit' && echo "quit requested" || echo "quit request failed"`,
+        '  i=0; while pgrep -x Claude >/dev/null && [ $i -lt 8 ]; do sleep 1; i=$((i+1)); done',
+        '  if pgrep -x Claude >/dev/null; then echo "still running after 8s, forcing"; pkill -x Claude; sleep 2; fi',
+        '  echo "opening $LINK"',
+        '  open "$LINK" && echo "open ok" || echo "open failed"',
+        '} >> "$LOG" 2>&1',
+        '',
+      ].join('\n'),
+    )
+    const detach = 'use POSIX qw(setsid); exit 0 if fork; setsid(); exec "/bin/sh", @ARGV'
+    await $.process.run(['/usr/bin/perl', '-e', detach, sh, log, link], { timeoutMs: 15_000 })
     return true
   }
   return false
